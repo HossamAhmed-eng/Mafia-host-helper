@@ -6,15 +6,21 @@
     <title>Mafia Host Master Panel</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 15px; margin: 0; max-width: 800px; margin: 0 auto; }
-        h1, h2, h3 { color: #f43f5e; margin-top: 0; }
+        h1, h2, h3, h4 { color: #f43f5e; margin-top: 0; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+        
         .card { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
         .flex-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+        
         input[type="text"], input[type="number"], select, button { padding: 10px; font-size: 15px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; }
         input[type="text"] { flex: 1; min-width: 150px; }
+        
         button { background: #e11d48; color: white; font-weight: bold; border: none; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #be123c; }
         .btn-secondary { background: #334155; }
         .btn-secondary:hover { background: #475569; }
+        .btn-guide { background: #3b82f6; font-size: 14px; padding: 8px 12px; }
+        .btn-guide:hover { background: #2563eb; }
         .btn-kill { background: #d97706; padding: 6px 10px; font-size: 12px; }
         .btn-del { background: #dc2626; padding: 6px 10px; font-size: 12px; }
         
@@ -34,11 +40,21 @@
         .badge-tie { background: #64748b; }    /* GRAY for Tied Leaders */
         
         .checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; background: #0f172a; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; user-select: none; }
+
+        /* Modal Styles */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .modal-content { background: #1e293b; padding: 25px; border-radius: 12px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 24px; color: #94a3b8; cursor: pointer; border: none; background: none; padding: 0; }
+        .modal-close:hover { color: #f8fafc; }
+        .role-title { font-weight: bold; margin-bottom: 2px; }
     </style>
 </head>
 <body>
 
-    <h1>🕴️ Host Master Panel</h1>
+    <div class="header-row">
+        <h1 style="margin: 0;">🕴️ Host Master Panel</h1>
+        <button class="btn-guide" onclick="openGuide()">📖 How to Play & Use Guide</button>
+    </div>
 
     <!-- ADD PLAYER MANUALLY -->
     <div class="card">
@@ -104,7 +120,73 @@
         <div id="vote-tallies"></div>
     </div>
 
+    <!-- USER GUIDE MODAL -->
+    <div id="guide-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeGuide()">×</button>
+            <h2>📖 User Guide & Roles</h2>
+            
+            <h3 style="color: #3b82f6; margin-top: 20px;">How to Use the Panel</h3>
+            <ul style="color: #cbd5e1; line-height: 1.6; padding-left: 20px;">
+                <li><strong>Add Players:</strong> Type names into the Manual Entry box. Press Enter or click 'Add Player'.</li>
+                <li><strong>Game Setup:</strong> Choose how many Killers you want and toggle extra roles (Joker/Assassin). Ensure you have enough players!</li>
+                <li><strong>Start Game:</strong> Click the Start Game button. Roles are hidden to players but visible to you. The system remembers who was a Citizen last time and gives them priority for special roles next time.</li>
+                <li><strong>Voting Panel:</strong> During the Day phase, select who each player is voting for using the dropdowns. The system automatically tallies votes — the person (or "Pass") with the most votes turns <strong>Green</strong>. Ties turn <strong>Gray</strong>.</li>
+                <li><strong>Kill button:</strong> Use this button to eliminate a player,either because they got voted out or got killed.</li>
+            </ul>
+
+            <h3 style="color: #10b981; margin-top: 25px;">Role Directory</h3>
+            
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #f43f5e;">🔪 Killer (Mafia)</div>
+                <div style="color: #94a3b8; font-size: 14px;">Wakes up at night to eliminate one person. They win when they equal the number of innocent citizens.</div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #10b981;">🩺 Doctor</div>
+                <div style="color: #94a3b8; font-size: 14px;">Wakes up at night and chooses one person to heal. If the Killer targets that person, they survive.</div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #3b82f6;">🔍 Detective</div>
+                <div style="color: #94a3b8; font-size: 14px;">Wakes up at night and points to one person. The Host silently nods 'Yes' or 'No' to indicate if they are a Killer.</div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #a855f7;">🃏 Joker</div>
+                <div style="color: #94a3b8; font-size: 14px;">A wild card! Their only goal is to convince the town they are guilty. <strong>If the town votes them out during the Day phase, the Joker instantly wins the game.</strong></div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #eab308;">🎯 Assassin</div>
+                <div style="color: #94a3b8; font-size: 14px;">Plays on the side of the innocents, but is armed with a <strong>one-time use bullet</strong>. They can choose to shoot a suspected Killer at any time. If they shoot an innocent, they waste their bullet</div>
+            </div>
+            
+            <div style="margin-bottom: 12px;">
+                <div class="role-title" style="color: #f8fafc;">🧑‍🌾 Citizen</div>
+                <div style="color: #94a3b8; font-size: 14px;">Has no special night abilities. Must use deduction during the day to find the Killers.</div>
+            </div>
+
+            <button onclick="closeGuide()" style="width: 100%; margin-top: 15px; background: #334155;">Close Guide</button>
+        </div>
+    </div>
+
     <script>
+        // Modal Logic
+        function openGuide() {
+            document.getElementById('guide-modal').style.display = 'flex';
+        }
+        function closeGuide() {
+            document.getElementById('guide-modal').style.display = 'none';
+        }
+        // Close modal if clicked outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('guide-modal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+
         // Game State
         let players = []; 
         let votes = {}; // voterId -> targetId
@@ -271,7 +353,6 @@
                 return;
             }
 
-            // Track tallies including a special 'PASS' category
             const tallies = { 'PASS': 0 };
             players.forEach(p => tallies[p.id] = 0);
 
