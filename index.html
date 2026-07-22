@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia Host Master Panel</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 15px; margin: 0; max-width: 800px; margin: 0 auto; }
+        h1, h2, h3 { color: #f43f5e; margin-top: 0; }
+        .card { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+        .flex-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+        input[type="text"], input[type="number"], select, button { padding: 10px; font-size: 15px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; }
+        input[type="text"] { flex: 1; min-width: 150px; }
+        button { background: #e11d48; color: white; font-weight: bold; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #be123c; }
+        .btn-secondary { background: #334155; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-kill { background: #d97706; padding: 6px 10px; font-size: 12px; }
+        .btn-del { background: #dc2626; padding: 6px 10px; font-size: 12px; }
+        
+        .player-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .player-table th, .player-table td { text-align: left; padding: 10px; border-bottom: 1px solid #334155; }
+        .dead-row { opacity: 0.5; text-decoration: line-through; }
+        
+        .vote-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; flex-wrap: wrap; gap: 10px; }
+        .vote-row select { flex: 1; min-width: 150px; }
+        .tally-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 6px; margin: 4px 0; background: #0f172a; border: 1px solid #1e293b; }
+        .tally-pass { background: #1e293b; border-color: #334155; margin-top: 10px; }
+        
+        /* Vote Tally Badges */
+        .badge { padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 13px; color: white; }
+        .badge-default { background: #475569; }
+        .badge-leader { background: #10b981; } /* GREEN for Most Votes */
+        .badge-tie { background: #64748b; }    /* GRAY for Tied Leaders */
+        
+        .checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; background: #0f172a; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; user-select: none; }
+    </style>
+</head>
+<body>
+
+    <h1>🕴️ Host Master Panel</h1>
+
+    <!-- ADD PLAYER MANUALLY -->
+    <div class="card">
+        <h3>1. Manual Player Entry</h3>
+        <div class="flex-row">
+            <input type="text" id="new-player-name" placeholder="Enter player name..." onkeypress="handleEnter(event)" />
+            <button onclick="addPlayer()">Add Player</button>
+        </div>
+    </div>
+
+    <!-- GAME CONTROLS & ROLE CONFIG -->
+    <div class="card">
+        <h3>2. Role Randomization & Setup</h3>
+        <div class="flex-row">
+            <label for="killer-count" style="font-weight: bold;">Killers:</label>
+            <input type="number" id="killer-count" value="1" min="1" max="5" style="max-width: 70px; text-align: center;" />
+            
+            <label class="checkbox-label">
+                <input type="checkbox" id="include-joker" /> 🃏 Joker
+            </label>
+            
+            <label class="checkbox-label">
+                <input type="checkbox" id="include-assassin" /> 🎯 Assassin
+            </label>
+        </div>
+        <p style="font-size: 13px; color: #94a3b8; margin-top: 8px;">
+            * Weighted Distribution active: Citizens automatically have higher priority for special roles in future rounds.
+        </p>
+        <button onclick="startGame()" style="width: 100%; padding: 14px; font-size: 16px; margin-top: 10px;">
+            🎲 START GAME & ASSIGN ROLES
+        </button>
+    </div>
+
+    <!-- ROSTER TABLE -->
+    <div class="card">
+        <h3>Connected Roster (<span id="player-count">0</span>)</h3>
+        <div style="overflow-x: auto;">
+            <table class="player-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Special Count</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="roster-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MANUAL VOTING MANAGER -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <h3>3. Host Voting Panel</h3>
+            <button class="btn-secondary" onclick="clearVotes()">Clear Votes</button>
+        </div>
+        <p style="font-size: 13px; color: #94a3b8;">Assign who each person votes for:</p>
+        <div id="voting-controls"></div>
+        
+        <hr style="border-color: #334155; margin: 15px 0;">
+        <h4 style="margin-bottom: 10px;">Vote Tally Results:</h4>
+        <div id="vote-tallies"></div>
+    </div>
+
+    <script>
+        // Game State
+        let players = []; 
+        let votes = {}; // voterId -> targetId
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') addPlayer();
+        }
+
+        function addPlayer() {
+            const input = document.getElementById('new-player-name');
+            const trimmedName = input.value.trim();
+            if (!trimmedName) return;
+
+            const id = 'player_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            players.push({
+                id: id,
+                name: trimmedName,
+                role: 'Unassigned',
+                alive: true,
+                specialRoleCount: 0
+            });
+
+            input.value = '';
+            renderAll();
+        }
+
+        function removePlayer(id) {
+            players = players.filter(p => p.id !== id);
+            
+            delete votes[id];
+            for (let voterId in votes) {
+                if (votes[voterId] === id) delete votes[voterId];
+            }
+            renderAll();
+        }
+
+        function toggleLife(id) {
+            const player = players.find(p => p.id === id);
+            if (player) {
+                player.alive = !player.alive;
+                renderAll();
+            }
+        }
+
+        function selectWeightedSpecialPlayer(candidateIds) {
+            const candidates = players.filter(p => candidateIds.includes(p.id));
+            const minCount = Math.min(...candidates.map(p => p.specialRoleCount));
+            
+            const pool = [];
+            candidates.forEach(p => {
+                const weight = Math.max(1, (minCount + 3) - p.specialRoleCount);
+                for (let i = 0; i < weight; i++) {
+                    pool.push(p.id);
+                }
+            });
+
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function startGame() {
+            const killerCount = Math.max(1, parseInt(document.getElementById('killer-count').value) || 1);
+            const includeJoker = document.getElementById('include-joker').checked;
+            const includeAssassin = document.getElementById('include-assassin').checked;
+            
+            let requiredMinPlayers = killerCount + 3;
+            if (includeJoker) requiredMinPlayers++;
+            if (includeAssassin) requiredMinPlayers++;
+
+            if (players.length < requiredMinPlayers) {
+                alert(`With selected settings, you need at least ${requiredMinPlayers} players!`);
+                return;
+            }
+
+            players.forEach(p => {
+                p.role = 'Citizen';
+                p.alive = true;
+            });
+            votes = {};
+
+            const specialRoles = [];
+            for (let i = 0; i < killerCount; i++) {
+                specialRoles.push(killerCount > 1 ? `Killer ${i + 1}` : 'Killer');
+            }
+            specialRoles.push('Doctor', 'Detective');
+            if (includeJoker) specialRoles.push('Joker');
+            if (includeAssassin) specialRoles.push('Assassin');
+
+            let remainingCandidateIds = players.map(p => p.id);
+
+            specialRoles.forEach(roleName => {
+                if (remainingCandidateIds.length > 0) {
+                    const chosenId = selectWeightedSpecialPlayer(remainingCandidateIds);
+                    const player = players.find(p => p.id === chosenId);
+                    
+                    player.role = roleName;
+                    player.specialRoleCount += 1;
+                    
+                    remainingCandidateIds = remainingCandidateIds.filter(id => id !== chosenId);
+                }
+            });
+
+            renderAll();
+        }
+
+        function recordVote(voterId, targetId) {
+            if (targetId === 'NONE') {
+                delete votes[voterId];
+            } else {
+                votes[voterId] = targetId;
+            }
+            renderVotingPanel();
+        }
+
+        function clearVotes() {
+            votes = {};
+            renderVotingPanel();
+        }
+
+        function getRoleColor(role) {
+            if (role.startsWith('Killer')) return '#f43f5e';
+            if (role === 'Doctor') return '#10b981';
+            if (role === 'Detective') return '#3b82f6';
+            if (role === 'Joker') return '#a855f7';
+            if (role === 'Assassin') return '#eab308';
+            if (role === 'Citizen') return '#f8fafc';
+            return '#94a3b8';
+        }
+
+        function renderAll() {
+            renderRoster();
+            renderVotingPanel();
+        }
+
+        function renderRoster() {
+            document.getElementById('player-count').innerText = players.length;
+            const tbody = document.getElementById('roster-body');
+            tbody.innerHTML = '';
+
+            players.forEach(p => {
+                const tr = document.createElement('tr');
+                if (!p.alive) tr.className = 'dead-row';
+
+                tr.innerHTML = `
+                    <td><strong>${p.name}</strong></td>
+                    <td><span style="font-weight:bold; color:${getRoleColor(p.role)}">${p.role}</span></td>
+                    <td>${p.specialRoleCount}</td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn-kill" onclick="toggleLife('${p.id}')">${p.alive ? 'Kill 💀' : 'Revive 💖'}</button>
+                        <button class="btn-del" onclick="removePlayer('${p.id}')">✕</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderVotingPanel() {
+            const controlsContainer = document.getElementById('voting-controls');
+            const talliesContainer = document.getElementById('vote-tallies');
+            controlsContainer.innerHTML = '';
+            talliesContainer.innerHTML = '';
+
+            if (players.length === 0) {
+                controlsContainer.innerHTML = '<span style="color:#64748b;">Add players to start voting.</span>';
+                return;
+            }
+
+            // Track tallies including a special 'PASS' category
+            const tallies = { 'PASS': 0 };
+            players.forEach(p => tallies[p.id] = 0);
+
+            // 1. Render dropdowns and calculate votes
+            players.filter(p => p.alive).forEach(voter => {
+                const div = document.createElement('div');
+                div.className = 'vote-row';
+
+                const selectedTarget = votes[voter.id] || 'NONE';
+                if (selectedTarget === 'NONE') {
+                    tallies['PASS'] += 1;
+                } else if (tallies[selectedTarget] !== undefined) {
+                    tallies[selectedTarget] += 1;
+                }
+
+                let optionsHtml = `<option value="NONE" ${selectedTarget === 'NONE' ? 'selected' : ''}>-- Pass / No Vote --</option>`;
+                
+                players.filter(target => target.alive && target.id !== voter.id).forEach(target => {
+                    optionsHtml += `<option value="${target.id}" ${selectedTarget === target.id ? 'selected' : ''}>Votes for ${target.name}</option>`;
+                });
+
+                div.innerHTML = `
+                    <span><strong>${voter.name}</strong>:</span>
+                    <select onchange="recordVote('${voter.id}', this.value)">
+                        ${optionsHtml}
+                    </select>
+                `;
+                controlsContainer.appendChild(div);
+            });
+
+            // 2. Calculate Max Votes and Ties (including 'PASS')
+            let maxVotes = 0;
+            let topVotedCount = 0;
+
+            Object.values(tallies).forEach(count => {
+                if (count > maxVotes) maxVotes = count;
+            });
+
+            if (maxVotes > 0) {
+                Object.values(tallies).forEach(count => {
+                    if (count === maxVotes) topVotedCount++;
+                });
+            }
+
+            // 3. Render Tallies for players
+            players.forEach(p => {
+                const count = tallies[p.id] || 0;
+                const tallyDiv = document.createElement('div');
+                tallyDiv.className = 'tally-row';
+
+                let badgeClass = 'badge-default'; 
+                if (count > 0 && count === maxVotes) {
+                    badgeClass = (topVotedCount === 1) ? 'badge-leader' : 'badge-tie';
+                }
+
+                tallyDiv.innerHTML = `
+                    <span><strong>${p.name}</strong> ${!p.alive ? '<em>(Dead)</em>' : ''}</span>
+                    <span class="badge ${badgeClass}">${count} Votes</span>
+                `;
+                talliesContainer.appendChild(tallyDiv);
+            });
+
+            // 4. Render 'PASS / No Vote' Tally at the bottom
+            const passCount = tallies['PASS'];
+            let passBadgeClass = 'badge-default';
+            if (passCount > 0 && passCount === maxVotes) {
+                passBadgeClass = (topVotedCount === 1) ? 'badge-leader' : 'badge-tie';
+            }
+
+            const passDiv = document.createElement('div');
+            passDiv.className = 'tally-row tally-pass';
+            passDiv.innerHTML = `
+                <span><strong>Pass / No Vote</strong></span>
+                <span class="badge ${passBadgeClass}">${passCount} Votes</span>
+            `;
+            talliesContainer.appendChild(passDiv);
+        }
+
+        renderAll();
+    </script>
+</body>
+</html>
